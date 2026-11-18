@@ -43,6 +43,7 @@ class AudioPhraserApp {
     this.initSectionPanel();
     this.bindEvents();
     this.setupShortcuts();
+    this.setupScrollableInputs();
     this.renderRecentProjects();
 
     // Load Empty.sty template in background
@@ -468,11 +469,14 @@ class AudioPhraserApp {
         this.updateTimeStretchBanner();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
+        } else {
+          this.audioEngine.clearCache();
         }
         this.project.isModified = true;
         this.scheduleAutoSave();
       }
     };
+    this.dom.trimStart.oninput = this.dom.trimStart.onchange;
 
     this.dom.trimEnd.onchange = () => {
       const sec = this.project.selectedSection;
@@ -486,11 +490,14 @@ class AudioPhraserApp {
         this.updateTimeStretchBanner();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
+        } else {
+          this.audioEngine.clearCache();
         }
         this.project.isModified = true;
         this.scheduleAutoSave();
       }
     };
+    this.dom.trimEnd.oninput = this.dom.trimEnd.onchange;
 
     this.dom.chkFade.onchange = () => {
       const sec = this.project.selectedSection;
@@ -677,6 +684,139 @@ class AudioPhraserApp {
         this.openExportModal();
       }
     });
+  }
+
+  /**
+   * Enables mouse wheel scrolling over all number inputs, sliders, and controls.
+   * Scrolling up increases value; scrolling down decreases value.
+   * Shift = coarse step (5x / 50ms); Ctrl/Alt = fine step (1ms).
+   */
+  setupScrollableInputs() {
+    let wheelAccum = 0;
+    let lastTarget = null;
+    let resetTimer = null;
+
+    window.addEventListener('wheel', (e) => {
+      // Isolate while modal dialogs are open or when mouse is inside waveform canvas
+      if (document.querySelector('.modal-overlay')) return;
+      if (e.target.closest('#waveformCanvas, #waveformBox')) return;
+
+      // Check if mouse is hovering over zoom controls
+      const zoomControl = e.target.closest('.zoom-controls');
+      if (zoomControl) {
+        e.preventDefault();
+        if (e.deltaY < 0) {
+          this.waveformView.zoomIn();
+        } else if (e.deltaY > 0) {
+          this.waveformView.zoomOut();
+        }
+        this.dom.zoomLevelText.textContent = `${this.waveformView.zoom.toFixed(1)}x`;
+        return;
+      }
+
+      // Find if mouse is over an input[type="number"], input[type="range"], or select
+      let input = null;
+      if (e.target.matches('input[type="number"], input[type="range"], select')) {
+        input = e.target;
+      } else {
+        const container = e.target.closest('.control-row, .tempo-control-box, .metro-toggle, .metronome-controls');
+        if (container) {
+          input = container.querySelector('input[type="number"], input[type="range"], select');
+        }
+      }
+
+      if (!input || input.disabled || input.readOnly) return;
+
+      // Prevent whole page / panel scrolling while mouse is over the control
+      e.preventDefault();
+
+      if (lastTarget !== input) {
+        wheelAccum = 0;
+        lastTarget = input;
+      }
+
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        wheelAccum = 0;
+      }, 200);
+
+      // Accumulate wheel delta (supports mouse wheel clicks and smooth trackpads)
+      wheelAccum += e.deltaY;
+      const threshold = 35; // Sensitivity threshold in pixels
+
+      if (Math.abs(wheelAccum) < threshold) {
+        return;
+      }
+
+      const direction = wheelAccum < 0 ? 1 : -1;
+      wheelAccum = 0; // Reset accumulator on each step
+
+      // Special handling for <select>
+      if (input.tagName === 'SELECT') {
+        const newIdx = input.selectedIndex + (direction > 0 ? -1 : 1);
+        if (newIdx >= 0 && newIdx < input.options.length && newIdx !== input.selectedIndex) {
+          input.selectedIndex = newIdx;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return;
+      }
+
+      const isShift = e.shiftKey;
+      const isAltOrCtrl = e.altKey || e.ctrlKey || e.metaKey;
+
+      let min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+      let max = input.max !== '' ? parseFloat(input.max) : Infinity;
+      let currentVal = parseFloat(input.value);
+      if (!Number.isFinite(currentVal)) currentVal = 0;
+
+      let step = 1;
+      let decimals = 0;
+
+      if (input.id === 'trimStart' || input.id === 'trimEnd') {
+        decimals = 3;
+        if (isAltOrCtrl) {
+          step = 0.001; // fine 1ms
+        } else if (isShift) {
+          step = 0.050; // coarse 50ms
+        } else {
+          step = 0.010; // normal 10ms
+        }
+      } else if (input.id === 'spinTempo') {
+        decimals = 0;
+        step = isShift ? 5 : 1;
+      } else if (input.id === 'spinBars' || input.id === 'spinPickup') {
+        decimals = 0;
+        step = 1;
+      } else if (input.type === 'range') {
+        decimals = 0;
+        step = isShift ? 5 : 1;
+      } else {
+        const attrStep = parseFloat(input.step);
+        if (Number.isFinite(attrStep) && attrStep > 0) {
+          step = attrStep;
+          const stepStr = String(input.step);
+          decimals = stepStr.includes('.') ? stepStr.split('.')[1].length : 0;
+        } else {
+          step = 1;
+          decimals = 0;
+        }
+      }
+
+      let newVal = currentVal + direction * step;
+      newVal = Math.max(min, Math.min(max, newVal));
+
+      if (decimals > 0) {
+        newVal = parseFloat(newVal.toFixed(decimals));
+      } else {
+        newVal = Math.round(newVal);
+      }
+
+      if (newVal !== currentVal) {
+        input.value = decimals > 0 ? newVal.toFixed(decimals) : String(newVal);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }, { passive: false });
   }
 
   async togglePlayback() {

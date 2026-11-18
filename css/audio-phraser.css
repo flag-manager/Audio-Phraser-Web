@@ -495,6 +495,7 @@ svg {
   color: var(--text);
   font: 700 13px var(--font-mono);
   text-align: center;
+  cursor: ns-resize;
 }
 
 .select-meter {
@@ -858,6 +859,12 @@ svg {
   font: 600 12px var(--font-mono);
   text-align: right;
   outline: none;
+  cursor: ns-resize;
+  transition: border-color var(--transition-fast);
+}
+
+.input-trim:hover {
+  border-color: rgba(32, 217, 243, 0.5);
 }
 
 .input-trim:focus {
@@ -905,7 +912,12 @@ svg {
   accent-color: var(--cyan);
   background: var(--line);
   border-radius: 3px;
-  cursor: pointer;
+  cursor: ew-resize;
+  transition: filter var(--transition-fast);
+}
+
+.volume-slider:hover {
+  filter: brightness(1.3);
 }
 
 /* ==========================================================================
