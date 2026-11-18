@@ -1,0 +1,15 @@
+{
+  "name": "audio-phraser-web",
+  "version": "1.0.0",
+  "description": "Yamaha Audio Phraser Web - Universal Web Edition for creating Yamaha Audio Styles in all browsers",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174 --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node test-modules.js && node test-aus-export.js"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0"
+  }
+}
