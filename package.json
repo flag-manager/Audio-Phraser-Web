@@ -1,13 +1,13 @@
 {
-  "name": "audio-phraser-web",
+  "name": "audio-style-slicer",
   "version": "1.0.0",
-  "description": "Yamaha Audio Phraser Web - Universal Web Edition for creating Yamaha Audio Styles in all browsers",
+  "description": "Audio Style Slicer — Audio Phraser Web Version for creating Yamaha Audio Styles in all browsers",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5174 --host",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test-modules.js && node test-aus-export.js && node test-playback-fixes.js && node test-scroll-inputs.js"
+    "test": "node test-modules.js && node test-aus-export.js && node test-playback-fixes.js && node test-scroll-inputs.js && node test-ui-enhancements.js && node test-keyboard-limits-and-conversion.js"
   },
   "devDependencies": {
     "vite": "^6.2.0"

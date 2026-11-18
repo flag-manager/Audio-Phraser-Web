@@ -12,6 +12,7 @@ export class AudioPhraserProject {
     this.timeSignature = { numerator: 4, denominator: 4 };
     this.ppq = 480;
     this.sampleRate = 44100;
+    this.targetKeyboard = 'psr_sx920'; // Default target keyboard ('psr_sx920', 'psr_s970', etc.)
     
     // Initialize 15 sections
     this.sections = new Map();
@@ -55,6 +56,13 @@ export class AudioPhraserProject {
     }
   }
 
+  setTargetKeyboard(keyboardId) {
+    if (keyboardId && this.targetKeyboard !== keyboardId) {
+      this.targetKeyboard = keyboardId;
+      this.isModified = true;
+    }
+  }
+
   addAudioToPool(fileName, audioBuffer) {
     this.audioPool.set(fileName, {
       name: fileName,
@@ -65,7 +73,7 @@ export class AudioPhraserProject {
     });
   }
 
-  assignAudioToSection(sectionId, fileName, audioBuffer) {
+  assignAudioToSection(sectionId, fileName, audioBuffer, formatInfo = null) {
     const sec = this.sections.get(sectionId);
     if (!sec) return;
     
@@ -73,6 +81,7 @@ export class AudioPhraserProject {
     
     sec.audioFileName = fileName;
     sec.audioBuffer = audioBuffer;
+    sec.audioFormatInfo = formatInfo;
     sec.trimStart = 0.0;
     sec.trimEnd = audioBuffer.duration;
     sec.originalTempo = this.masterTempo;
@@ -97,6 +106,14 @@ export class AudioPhraserProject {
     this.undoStack.push({ desc: actionDesc, data: snapshot });
     if (this.undoStack.length > 50) this.undoStack.shift();
     this.redoStack = [];
+  }
+
+  get canUndo() {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo() {
+    return this.redoStack.length > 0;
   }
 
   undo() {
@@ -124,6 +141,7 @@ export class AudioPhraserProject {
         bars: s.bars,
         pickup: s.pickup,
         audioFileName: s.audioFileName,
+        audioFormatInfo: s.audioFormatInfo ? { ...s.audioFormatInfo } : null,
         trimStart: s.trimStart,
         trimEnd: s.trimEnd,
         fadeIn: s.fadeIn,
@@ -142,6 +160,7 @@ export class AudioPhraserProject {
       masterTempo: this.masterTempo,
       timeSignature: { ...this.timeSignature },
       selectedSectionId: this.selectedSectionId,
+      targetKeyboard: this.targetKeyboard,
       sections: sectionsObj
     };
   }
@@ -151,6 +170,7 @@ export class AudioPhraserProject {
     this.masterTempo = data.masterTempo || 120;
     this.timeSignature = data.timeSignature || { numerator: 4, denominator: 4 };
     this.selectedSectionId = data.selectedSectionId || 'main_a';
+    this.targetKeyboard = data.targetKeyboard || this.targetKeyboard;
     
     if (data.sections) {
       for (const [id, sData] of Object.entries(data.sections)) {
@@ -159,6 +179,7 @@ export class AudioPhraserProject {
           sec.bars = sData.bars;
           sec.pickup = sData.pickup || 0;
           sec.audioFileName = sData.audioFileName;
+          sec.audioFormatInfo = sData.audioFormatInfo || null;
           // Reconnect buffer from pool if available
           if (sData.audioFileName && this.audioPool.has(sData.audioFileName)) {
             sec.audioBuffer = this.audioPool.get(sData.audioFileName).buffer;

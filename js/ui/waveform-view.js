@@ -36,6 +36,7 @@ export class WaveformView {
     this.onTrimChanged = null;
     this.onBeatMarkerChanged = null;
     this.onSeek = null;
+    this.onZoomChanged = null;
 
     this.resizePending = false;
     this.setupEvents();
@@ -50,6 +51,7 @@ export class WaveformView {
     this.playheadSec = -1;
     this.invalidateStatic();
     this.render();
+    if (this.onZoomChanged) this.onZoomChanged(this.zoom);
   }
 
   invalidateStatic() {
@@ -99,6 +101,7 @@ export class WaveformView {
     }
     this.invalidateStatic();
     this.render();
+    if (this.onZoomChanged) this.onZoomChanged(this.zoom);
   }
 
   setScrollOffset(sec) {

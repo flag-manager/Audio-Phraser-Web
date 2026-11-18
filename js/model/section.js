@@ -34,6 +34,7 @@ export class StyleSection {
     this.audioFileName = null;
     this.audioBuffer = null; // Decoded AudioBuffer
     this.rawPcm = null;      // Float32Array stereo/mono samples
+    this.audioFormatInfo = null; // Original audio format metadata & conversion info
     
     // Trimming & boundary
     this.trimStart = 0.0;    // In seconds
@@ -98,6 +99,7 @@ export class StyleSection {
     this.audioFileName = null;
     this.audioBuffer = null;
     this.rawPcm = null;
+    this.audioFormatInfo = null;
     this.trimStart = 0.0;
     this.trimEnd = 0.0;
     this.beatPoints = [];

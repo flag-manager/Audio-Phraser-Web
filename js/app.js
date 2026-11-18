@@ -1,5 +1,5 @@
 /**
- * Yamaha Audio Phraser Studio Web - Application Main Controller
+ * Audio Style Slicer (Audio Phraser Web Version) - Application Main Controller
  * Orchestrates UI, audio engine, beat detection, Yamaha style export,
  * session auto-save persistence via IndexedDB, and StyleCraft Studio aesthetics.
  */
@@ -15,6 +15,8 @@ import { ApprojIO } from './export/approj-io.js';
 import { ModalDialogs } from './ui/modal-dialogs.js';
 import { SessionStorageManager } from './model/session-storage.js';
 import { RecentProjectsManager } from './model/recent-projects.js';
+import { AudioConverter } from './audio/audio-converter.js';
+import { KeyboardManager } from './model/keyboard-profiles.js';
 
 // SVG Vector Icon Templates
 const PLAY_ICON_SVG = `<svg class="transport-icon" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
@@ -25,6 +27,7 @@ class AudioPhraserApp {
     this.project = new AudioPhraserProject();
     this.audioEngine = new AudioEngine();
     this.emptyStyBuffer = null;
+    this.currentFileHandle = null;
 
     // UI Components
     this.waveformView = null;
@@ -41,6 +44,7 @@ class AudioPhraserApp {
     this.bindDomElements();
     this.initWaveform();
     this.initSectionPanel();
+    this.setupInspectorResizer();
     this.bindEvents();
     this.setupShortcuts();
     this.setupScrollableInputs();
@@ -52,19 +56,38 @@ class AudioPhraserApp {
     // Check for prior unsaved session in IndexedDB
     await this.checkAndPromptSessionRestore();
 
+    // Restore preferred target keyboard from localStorage
+    const savedKeyboard = localStorage.getItem('audio_phraser_target_keyboard');
+    if (savedKeyboard) {
+      this.project.setTargetKeyboard(savedKeyboard);
+    }
+    if (this.dom.selectTargetKeyboard) {
+      this.dom.selectTargetKeyboard.value = this.project.targetKeyboard || 'psr_sx920';
+    }
+    if (this.dom.selectKeyboardDisplay) {
+      const profile = KeyboardManager.getProfile(this.project.targetKeyboard || 'psr_sx920');
+      this.dom.selectKeyboardDisplay.textContent = profile.name;
+    }
+
     // Initial render
     this.selectSection(this.project.selectedSectionId || 'main_a');
     this.updateUI();
+    this.updateKeyboardPlayability();
   }
 
   bindDomElements() {
     const ids = [
       'waveformCanvas', 'waveformBox', 'sectionPanel',
-      'btnNew', 'btnOpen', 'btnSave', 'btnImportAudio', 'btnUnlinkAudio',
+      'btnNew', 'btnOpen', 'btnSave', 'btnUndo', 'btnRedo', 'btnImportAudio', 'btnUnlinkAudio',
       'spinTempo', 'selectTimeSignature', 'btnExportSty',
+      'selectTargetKeyboard', 'selectKeyboardDisplay', 'styleSizeBox', 'lblStyleSize', 'lblStyleLimit', 'styleSizeBarFill', 'badgeStylePlayable',
+      'conversionToast',
       'btnZoomIn', 'btnZoomOut', 'zoomLevelText', 'timeStretchBanner',
+      'valSecLen', 'valSecBars', 'valWaveLen', 'valTrimRange', 'valStretchPct', 'pillStretchStatus',
+      'panelResizer', 'controlsPanel', 'btnToggleInspector', 'btnExpandInspector',
       'lblAssignedFile', 'lblAudioDuration', 'lblAudioChannels',
       'spinBars', 'spinPickup', 'trimStart', 'trimEnd', 'chkFade', 'chkBlank',
+      'btnHelpTrimming', 'btnHelpBeatGrid',
       'btnAutoDetectBeat', 'btnBeatHalf', 'btnBeatDouble', 'btnToggleShiftBeat',
       'sliderVolume', 'lblVolumeVal', 'sliderPan', 'lblPanVal', 'chkTimeStretch',
       'btnPlayLoop', 'btnStop', 'playIconWrap', 'playText',
@@ -74,7 +97,7 @@ class AudioPhraserApp {
       'menuNewProject', 'menuOpenProject', 'menuRecents', 'recentProjectsMenu',
       'menuSaveProject', 'menuSaveProjectAs',
       'menuImportAudio', 'menuExportStyle', 'menuExportWav',
-      'menuUndo', 'menuRedo', 'menuClearSection', 'menuAudioSettings'
+      'menuAudioSettings'
     ];
 
     for (const id of ids) {
@@ -161,6 +184,12 @@ class AudioPhraserApp {
   initWaveform() {
     this.waveformView = new WaveformView(this.dom.waveformCanvas, this.dom.waveformBox);
 
+    this.waveformView.onZoomChanged = (zoom) => {
+      if (this.dom.zoomLevelText) {
+        this.dom.zoomLevelText.textContent = `${zoom.toFixed(1)}x`;
+      }
+    };
+
     this.waveformView.onTrimChanged = (start, end) => {
       const sec = this.project.selectedSection;
       if (sec) {
@@ -169,6 +198,7 @@ class AudioPhraserApp {
         this.dom.trimStart.value = start.toFixed(3);
         this.dom.trimEnd.value = end.toFixed(3);
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         }
@@ -252,7 +282,13 @@ class AudioPhraserApp {
     if (hasAudio) {
       this.dom.lblAssignedFile.textContent = sec.audioFileName;
       this.dom.lblAudioDuration.textContent = `Duration: ${sec.duration.toFixed(3)} s`;
-      this.dom.lblAudioChannels.textContent = `${sec.audioBuffer.numberOfChannels === 2 ? 'Stereo' : 'Mono'} ${sec.audioBuffer.sampleRate} Hz`;
+      let chanStr = `${sec.audioBuffer.numberOfChannels === 2 ? 'Stereo' : 'Mono'} 44.1 kHz · 16-bit PCM`;
+      if (sec.audioFormatInfo && sec.audioFormatInfo.wasConverted) {
+        const origDesc = sec.audioFormatInfo.originalFormat || 'Audio';
+        const origSr = sec.audioFormatInfo.originalSampleRate ? ` ${sec.audioFormatInfo.originalSampleRate}Hz` : '';
+        chanStr += ` (Converted from ${origDesc}${origSr})`;
+      }
+      this.dom.lblAudioChannels.textContent = chanStr;
     } else {
       this.dom.lblAssignedFile.textContent = 'No audio assigned';
       this.dom.lblAudioDuration.textContent = 'Duration: 0.000 s';
@@ -277,37 +313,92 @@ class AudioPhraserApp {
 
   updateTimeStretchBanner() {
     const sec = this.project.selectedSection;
+    const targetTempo = this.project.masterTempo || 120;
+    const secBars = sec ? sec.bars : 2;
+    const barText = `${secBars} ${secBars === 1 ? 'Bar' : 'Bars'}`;
+
     if (!sec || !sec.hasAudio) {
-      this.dom.timeStretchBanner.innerHTML = `[Section length] 0.000 sec. - [Wave length] 0.000 sec. - [Time stretch] <span class="val-green">100.00 %</span>`;
+      const secLen = sec ? sec.getSectionExpectedDuration(targetTempo) : 0;
+      if (this.dom.valSecLen) this.dom.valSecLen.textContent = `${secLen.toFixed(3)}s`;
+      if (this.dom.valSecBars) this.dom.valSecBars.textContent = barText;
+      if (this.dom.valWaveLen) this.dom.valWaveLen.textContent = '0.000s';
+      if (this.dom.valTrimRange) this.dom.valTrimRange.textContent = 'No Audio';
+      if (this.dom.valStretchPct) {
+        this.dom.valStretchPct.textContent = '100.00%';
+        this.dom.valStretchPct.className = 'telemetry-chip-val';
+      }
+      if (this.dom.pillStretchStatus) {
+        this.dom.pillStretchStatus.textContent = 'IDLE';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-off';
+      }
       return;
     }
 
-    const targetTempo = this.project.masterTempo;
     const secLen = sec.getSectionExpectedDuration(targetTempo);
     const waveLen = sec.trimmedDuration;
     const ratio = sec.getTimeStretchRatio(targetTempo);
 
-    const isGoodRatio = ratio >= 70.0 && ratio <= 140.0;
-    const valClass = isGoodRatio ? 'val-green' : 'val-red';
+    if (this.dom.valSecLen) this.dom.valSecLen.textContent = `${secLen.toFixed(3)}s`;
+    if (this.dom.valSecBars) this.dom.valSecBars.textContent = barText;
+    if (this.dom.valWaveLen) this.dom.valWaveLen.textContent = `${waveLen.toFixed(3)}s`;
 
-    this.dom.timeStretchBanner.innerHTML = `
-      [Section length] ${secLen.toFixed(3)} sec. - [Wave length] ${waveLen.toFixed(3)} sec. - [Time stretch] <span class="${valClass}">${ratio.toFixed(2)} %</span>
-    `;
+    if (this.dom.valTrimRange) {
+      if (sec.trimStart === 0 && Math.abs(sec.trimEnd - sec.duration) < 0.002) {
+        this.dom.valTrimRange.textContent = 'Full Wave';
+      } else {
+        this.dom.valTrimRange.textContent = `${sec.trimStart.toFixed(2)}–${sec.trimEnd.toFixed(2)}s`;
+      }
+    }
+
+    if (this.dom.valStretchPct) {
+      this.dom.valStretchPct.textContent = `${ratio.toFixed(2)}%`;
+    }
+
+    if (this.dom.pillStretchStatus) {
+      if (!sec.timeStretchEnabled) {
+        this.dom.pillStretchStatus.textContent = 'STRETCH OFF';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-off';
+        if (this.dom.valStretchPct) this.dom.valStretchPct.className = 'telemetry-chip-val';
+      } else if (Math.abs(ratio - 100.0) < 0.5) {
+        this.dom.pillStretchStatus.textContent = '1:1 MATCH';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-good';
+        if (this.dom.valStretchPct) this.dom.valStretchPct.className = 'telemetry-chip-val val-green';
+      } else if (ratio >= 80.0 && ratio <= 125.0) {
+        this.dom.pillStretchStatus.textContent = ratio > 100 ? 'STRETCH' : 'COMPRESS';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-good';
+        if (this.dom.valStretchPct) this.dom.valStretchPct.className = 'telemetry-chip-val val-green';
+      } else if (ratio >= 65.0 && ratio <= 150.0) {
+        this.dom.pillStretchStatus.textContent = 'MODERATE';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-warn';
+        if (this.dom.valStretchPct) this.dom.valStretchPct.className = 'telemetry-chip-val';
+      } else {
+        this.dom.pillStretchStatus.textContent = 'EXTREME';
+        this.dom.pillStretchStatus.className = 'telemetry-status-badge status-alert';
+        if (this.dom.valStretchPct) this.dom.valStretchPct.className = 'telemetry-chip-val val-red';
+      }
+    }
   }
 
   async importAudioFile(file, targetSectionId = null) {
     await this.audioEngine.init();
 
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await this.audioEngine.ctx.decodeAudioData(arrayBuffer);
+      const conversion = await AudioConverter.convert(file, this.audioEngine.ctx);
+      const audioBuffer = conversion.audioBuffer;
 
       const secId = targetSectionId || this.project.selectedSectionId;
-      this.project.assignAudioToSection(secId, file.name, audioBuffer);
+      this.project.assignAudioToSection(secId, file.name, audioBuffer, {
+        originalFormat: conversion.originalFormat,
+        originalSampleRate: conversion.originalSampleRate,
+        originalBitDepth: conversion.originalBitDepth,
+        originalChannels: conversion.originalChannels,
+        wasConverted: conversion.wasConverted,
+        summary: conversion.summary
+      });
 
       const sec = this.project.sections.get(secId);
 
-      // Run automatic beat & onset detection
+      // Run automatic beat & onset detection on the converted 44.1kHz 16-bit audio
       const analysis = BeatDetector.analyze(audioBuffer, {
         defaultTempo: this.project.masterTempo,
         timeSignature: sec.timeSignature,
@@ -326,31 +417,50 @@ class AudioPhraserApp {
       this.sectionPanel.render(this.project);
       this.selectSection(secId);
       this.updateUI();
+      this.updateKeyboardPlayability();
       this.scheduleAutoSave();
       RecentProjectsManager.addProject(this.project);
       this.renderRecentProjects();
+
+      // Show toast notification if conversion/resampling occurred
+      if (conversion.wasConverted) {
+        this.showToast(conversion.summary);
+      }
     } catch (err) {
       console.error('Audio import failed:', err);
-      ModalDialogs.showAlert('Audio Import Error', 'Failed to decode audio file. Please ensure it is a valid WAV, AIFF, MP3, or OGG file.', 'error');
+      ModalDialogs.showAlert('Audio Import Error', 'Failed to decode or convert audio file: ' + (err?.message || err), 'error');
     }
   }
 
   handleFileDropOnSection(sectionId, file) {
-    if (file.name.match(/\.(wav|aif|aiff|mp3|ogg|flac)$/i)) {
+    if (file.name.match(/\.(wav|aif|aiff|mp3|ogg|flac|m4a|aac)$/i)) {
       this.importAudioFile(file, sectionId);
     } else {
-      ModalDialogs.showAlert('Invalid File', 'Please drop a valid audio file (.wav, .aiff, .mp3).', 'warning');
+      ModalDialogs.showAlert('Invalid File', 'Please drop a valid audio file (.mp3, .wav, .aiff, .ogg, .flac).', 'warning');
     }
   }
 
   bindEvents() {
     // Toolbar buttons
-    this.dom.btnNew.onclick = () => this.newProject();
-    this.dom.btnOpen.onclick = () => this.dom.projectFileInput.click();
-    this.dom.btnSave.onclick = () => this.saveProject();
-    this.dom.btnImportAudio.onclick = () => this.dom.audioFileInput.click();
-    this.dom.btnUnlinkAudio.onclick = () => this.unlinkAudio();
-    this.dom.btnExportSty.onclick = () => this.openExportModal();
+    if (this.dom.btnNew) this.dom.btnNew.onclick = () => this.newProject();
+    if (this.dom.btnOpen) this.dom.btnOpen.onclick = () => this.dom.projectFileInput.click();
+    if (this.dom.btnSave) this.dom.btnSave.onclick = () => this.saveProject();
+    if (this.dom.btnUndo) this.dom.btnUndo.onclick = () => this.undo();
+    if (this.dom.btnRedo) this.dom.btnRedo.onclick = () => this.redo();
+    if (this.dom.btnImportAudio) this.dom.btnImportAudio.onclick = () => this.dom.audioFileInput.click();
+    if (this.dom.btnUnlinkAudio) this.dom.btnUnlinkAudio.onclick = () => this.unlinkAudio();
+    if (this.dom.btnExportSty) this.dom.btnExportSty.onclick = () => this.openExportModal();
+
+    // Target Keyboard selection listener
+    if (this.dom.selectTargetKeyboard) {
+      this.dom.selectTargetKeyboard.onchange = () => {
+        const val = this.dom.selectTargetKeyboard.value;
+        this.project.setTargetKeyboard(val);
+        localStorage.setItem('audio_phraser_target_keyboard', val);
+        this.updateKeyboardPlayability();
+        this.scheduleAutoSave();
+      };
+    }
 
     // Menu bar items
     this.dom.menuNewProject.onclick = () => this.newProject();
@@ -360,10 +470,16 @@ class AudioPhraserApp {
     this.dom.menuImportAudio.onclick = () => this.dom.audioFileInput.click();
     this.dom.menuExportStyle.onclick = () => this.openExportModal();
     this.dom.menuExportWav.onclick = () => this.exportCurrentSectionWav();
-    this.dom.menuUndo.onclick = () => this.undo();
-    this.dom.menuRedo.onclick = () => this.redo();
-    this.dom.menuClearSection.onclick = () => this.unlinkAudio();
-    this.dom.menuAudioSettings.onclick = () => ModalDialogs.showAudioSettings(this.audioEngine);
+    if (this.dom.menuUndo) this.dom.menuUndo.onclick = () => this.undo();
+    if (this.dom.menuRedo) this.dom.menuRedo.onclick = () => this.redo();
+    if (this.dom.menuClearSection) this.dom.menuClearSection.onclick = () => this.unlinkAudio();
+    if (this.dom.menuAudioSettings) this.dom.menuAudioSettings.onclick = () => ModalDialogs.showAudioSettings(this.audioEngine);
+
+    // Inspector toggle & help buttons
+    if (this.dom.btnToggleInspector) this.dom.btnToggleInspector.onclick = () => this.toggleInspector();
+    if (this.dom.btnExpandInspector) this.dom.btnExpandInspector.onclick = () => this.toggleInspector(true);
+    if (this.dom.btnHelpTrimming) this.dom.btnHelpTrimming.onclick = () => ModalDialogs.showHelpGuide('trimming');
+    if (this.dom.btnHelpBeatGrid) this.dom.btnHelpBeatGrid.onclick = () => ModalDialogs.showHelpGuide('beatgrid');
 
     // File input handlers
     this.dom.audioFileInput.onchange = (e) => {
@@ -426,6 +542,7 @@ class AudioPhraserApp {
         sec.bars = bars;
         this.sectionPanel.updateSectionCard(sec.id, sec);
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         } else {
@@ -444,6 +561,7 @@ class AudioPhraserApp {
         const pickup = Math.max(0, Math.min(8, parseInt(this.dom.spinPickup.value, 10) || 0));
         sec.pickup = pickup;
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         } else {
@@ -467,6 +585,7 @@ class AudioPhraserApp {
         this.waveformView.invalidateStatic();
         this.waveformView.render();
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         } else {
@@ -488,6 +607,7 @@ class AudioPhraserApp {
         this.waveformView.invalidateStatic();
         this.waveformView.render();
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         } else {
@@ -600,6 +720,7 @@ class AudioPhraserApp {
       if (sec) {
         sec.timeStretchEnabled = this.dom.chkTimeStretch.checked;
         this.updateTimeStretchBanner();
+        this.updateKeyboardPlayability();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
         }
@@ -682,6 +803,9 @@ class AudioPhraserApp {
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         this.openExportModal();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        this.toggleInspector();
       }
     });
   }
@@ -867,6 +991,7 @@ class AudioPhraserApp {
       if (!ok) return;
     }
     this.stopPlayback();
+    this.currentFileHandle = null;
     this.project = new AudioPhraserProject();
     await SessionStorageManager.clearSession();
     this.sectionPanel.render(this.project);
@@ -877,11 +1002,20 @@ class AudioPhraserApp {
 
   async loadProjectFile(file) {
     try {
+      this.currentFileHandle = null;
       await this.audioEngine.init();
       await ApprojIO.importProject(file, this.project, this.audioEngine.ctx);
+      if (this.dom.selectTargetKeyboard) {
+        this.dom.selectTargetKeyboard.value = this.project.targetKeyboard || 'psr_sx920';
+      }
+      if (this.dom.selectKeyboardDisplay) {
+        const profile = KeyboardManager.getProfile(this.project.targetKeyboard || 'psr_sx920');
+        this.dom.selectKeyboardDisplay.textContent = profile.name;
+      }
       this.sectionPanel.render(this.project);
       this.selectSection(this.project.selectedSectionId);
       this.updateUI();
+      this.updateKeyboardPlayability();
       this.scheduleAutoSave();
       RecentProjectsManager.addProject(this.project);
       this.renderRecentProjects();
@@ -893,13 +1027,75 @@ class AudioPhraserApp {
   }
 
   async saveProject() {
-    const blob = await ApprojIO.exportProject(this.project, true);
-    const fileName = `${this.project.name.replace(/\.[^/.]+$/, '')}.approj`;
-    this.downloadBlob(blob, fileName);
-    this.project.isModified = false;
-    this.setSessionStatus('Exported to file', false);
-    RecentProjectsManager.addProject(this.project);
-    this.renderRecentProjects();
+    try {
+      const blob = await ApprojIO.exportProject(this.project, true);
+      const baseName = (this.project.name || 'Untitled').replace(/\.[^/.]+$/, '');
+      const fileName = `${baseName}.approj`;
+
+      // If user has an active file handle from previous save, write directly
+      if (this.currentFileHandle) {
+        try {
+          const writable = await this.currentFileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          this.project.isModified = false;
+          this.setSessionStatus('Saved', false);
+          this.updateUndoRedoButtons();
+          RecentProjectsManager.addProject(this.project);
+          this.renderRecentProjects();
+          return;
+        } catch (handleErr) {
+          console.warn('Could not write to cached file handle, opening file picker:', handleErr);
+          this.currentFileHandle = null;
+        }
+      }
+
+      // Open native OS Explorer File Save Dialog (Chromium File System Access API)
+      if ('showSaveFilePicker' in window) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: fileName,
+            types: [{
+              description: 'Audio Style Slicer Project (*.approj)',
+              accept: { 'application/octet-stream': ['.approj'], 'application/zip': ['.approj'] }
+            }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          this.currentFileHandle = handle;
+          const chosenName = handle.name.replace(/\.approj$/i, '');
+          if (chosenName) {
+            this.project.name = chosenName;
+            const titleEl = document.getElementById('titlebarTitle');
+            if (titleEl) titleEl.textContent = `${chosenName} — Audio Style Slicer`;
+          }
+          this.project.isModified = false;
+          this.setSessionStatus('Saved', false);
+          this.updateUndoRedoButtons();
+          RecentProjectsManager.addProject(this.project);
+          this.renderRecentProjects();
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') {
+            // User cancelled Explorer save dialog - do not force browser download
+            return;
+          }
+          console.warn('showSaveFilePicker failed, falling back to download:', err);
+        }
+      }
+
+      // Fallback for browsers that do not support showSaveFilePicker
+      this.downloadBlob(blob, fileName);
+      this.project.isModified = false;
+      this.setSessionStatus('Exported to file', false);
+      this.updateUndoRedoButtons();
+      RecentProjectsManager.addProject(this.project);
+      this.renderRecentProjects();
+    } catch (err) {
+      console.error('Save project error:', err);
+      ModalDialogs.showAlert('Save Error', 'Failed to save project: ' + err.message, 'error');
+    }
   }
 
   renderRecentProjects() {
@@ -950,6 +1146,7 @@ class AudioPhraserApp {
       if (!ok) return;
     }
     this.stopPlayback();
+    this.currentFileHandle = null;
     this.audioEngine.clearCache();
     if (recentEntry.data) {
       this.project.restoreState(recentEntry.data);
@@ -961,11 +1158,8 @@ class AudioPhraserApp {
   }
 
   async saveProjectAs() {
-    const fn = prompt('Enter project file name:', `${this.project.name}.approj`);
-    if (fn) {
-      this.project.name = fn.replace(/\.approj$/i, '');
-      await this.saveProject();
-    }
+    this.currentFileHandle = null;
+    await this.saveProject();
   }
 
   unlinkAudio() {
@@ -998,19 +1192,143 @@ class AudioPhraserApp {
     }
   }
 
-  openExportModal() {
-    ModalDialogs.showExportDialog(this.project, async (fileName) => {
-      if (!this.emptyStyBuffer) {
-        await this.loadEmptyStyTemplate();
-      }
-      if (!this.emptyStyBuffer) {
-        throw new Error('Could not load base Empty.sty template.');
-      }
+  updateUndoRedoButtons() {
+    if (this.dom.btnUndo) {
+      this.dom.btnUndo.disabled = !this.project.canUndo;
+    }
+    if (this.dom.btnRedo) {
+      this.dom.btnRedo.disabled = !this.project.canRedo;
+    }
+  }
 
-      const blob = await AusWriter.exportToAus(this.project, this.emptyStyBuffer);
-      this.downloadBlob(blob, fileName);
-      ModalDialogs.showAlert('Export Complete', `Successfully exported Yamaha Audio Style: ${fileName}`, 'info');
+  setupInspectorResizer() {
+    const resizer = this.dom.panelResizer;
+    const panel = this.dom.controlsPanel;
+    if (!resizer || !panel) return;
+
+    // Load persisted inspector width and collapsed state
+    const savedWidth = localStorage.getItem('audioPhraser_inspectorWidth');
+    if (savedWidth) {
+      const w = parseInt(savedWidth, 10);
+      if (w >= 220 && w <= 550) {
+        panel.style.width = `${w}px`;
+        panel.style.minWidth = `${w}px`;
+      }
+    }
+
+    const isCollapsed = localStorage.getItem('audioPhraser_inspectorCollapsed') === 'true';
+    if (isCollapsed) {
+      this.toggleInspector(false, true);
+    }
+
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    const onPointerMove = (e) => {
+      if (!isDragging) return;
+      const dx = startX - e.clientX;
+      const newWidth = Math.max(220, Math.min(550, startWidth + dx));
+      panel.style.width = `${newWidth}px`;
+      panel.style.minWidth = `${newWidth}px`;
+      if (this.waveformView) this.waveformView.resize();
+    };
+
+    const onPointerUp = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      panel.classList.remove('resizing-active');
+      resizer.classList.remove('resizing');
+      document.body.classList.remove('panel-resizing');
+      try { resizer.releasePointerCapture(e.pointerId); } catch (_) { }
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+
+      const finalWidth = parseInt(panel.style.width, 10);
+      if (finalWidth) {
+        localStorage.setItem('audioPhraser_inspectorWidth', finalWidth);
+      }
+      if (this.waveformView) this.waveformView.resize();
+    };
+
+    resizer.addEventListener('pointerdown', (e) => {
+      if (panel.classList.contains('collapsed')) return;
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = panel.getBoundingClientRect().width;
+      panel.classList.add('resizing-active');
+      resizer.classList.add('resizing');
+      document.body.classList.add('panel-resizing');
+      try { resizer.setPointerCapture(e.pointerId); } catch (_) { }
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      e.preventDefault();
     });
+
+    resizer.addEventListener('dblclick', () => {
+      panel.style.width = '320px';
+      panel.style.minWidth = '320px';
+      localStorage.setItem('audioPhraser_inspectorWidth', 320);
+      if (this.waveformView) this.waveformView.resize();
+    });
+  }
+
+  toggleInspector(forceOpen = false, silent = false) {
+    const panel = this.dom.controlsPanel;
+    const resizer = this.dom.panelResizer;
+    const expandBtn = this.dom.btnExpandInspector;
+    if (!panel) return;
+
+    const isCurrentlyCollapsed = panel.classList.contains('collapsed');
+    const shouldCollapse = forceOpen ? false : !isCurrentlyCollapsed;
+
+    if (shouldCollapse) {
+      panel.classList.add('collapsed');
+      if (resizer) resizer.classList.add('collapsed');
+      if (expandBtn) expandBtn.style.display = 'flex';
+      localStorage.setItem('audioPhraser_inspectorCollapsed', 'true');
+    } else {
+      panel.classList.remove('collapsed');
+      if (resizer) resizer.classList.remove('collapsed');
+      if (expandBtn) expandBtn.style.display = 'none';
+      localStorage.setItem('audioPhraser_inspectorCollapsed', 'false');
+      const savedWidth = localStorage.getItem('audioPhraser_inspectorWidth') || 320;
+      panel.style.width = `${savedWidth}px`;
+      panel.style.minWidth = `${savedWidth}px`;
+    }
+
+    if (!silent && this.waveformView) {
+      setTimeout(() => this.waveformView.resize(), 160);
+    }
+  }
+
+  openExportModal() {
+    ModalDialogs.showExportDialog(
+      this.project,
+      async (fileName, targetKbId) => {
+        if (!this.emptyStyBuffer) {
+          await this.loadEmptyStyTemplate();
+        }
+        if (!this.emptyStyBuffer) {
+          throw new Error('Could not load base Empty.sty template.');
+        }
+
+        const blob = await AusWriter.exportToAus(this.project, this.emptyStyBuffer, { targetKeyboard: targetKbId });
+        this.downloadBlob(blob, fileName);
+        ModalDialogs.showAlert('Export Complete', `Successfully exported Yamaha Audio Style: ${fileName}`, 'info');
+      },
+      (newKbId) => {
+        if (this.dom.selectTargetKeyboard) {
+          this.dom.selectTargetKeyboard.value = newKbId;
+        }
+        if (this.dom.selectKeyboardDisplay) {
+          const profile = KeyboardManager.getProfile(newKbId);
+          this.dom.selectKeyboardDisplay.textContent = profile.name;
+        }
+        localStorage.setItem('audio_phraser_target_keyboard', newKbId);
+        this.updateKeyboardPlayability();
+      }
+    );
   }
 
   exportCurrentSectionWav() {
@@ -1038,10 +1356,84 @@ class AudioPhraserApp {
     }, 100);
   }
 
+  /**
+   * Update live Yamaha Target Keyboard playability monitor and memory meter in workspace toolbar.
+   */
+  updateKeyboardPlayability() {
+    const kbId = this.project.targetKeyboard || 'psr_sx920';
+    const validation = KeyboardManager.validateExport(this.project, kbId, this.emptyStyBuffer?.byteLength || 13500);
+
+    if (this.dom.selectKeyboardDisplay) {
+      this.dom.selectKeyboardDisplay.textContent = validation.keyboard.name;
+    }
+
+    if (this.dom.lblStyleSize) {
+      this.dom.lblStyleSize.textContent = `${validation.estimatedMB.toFixed(1)} MB`;
+    }
+    if (this.dom.lblStyleLimit) {
+      this.dom.lblStyleLimit.textContent = `${validation.maxMB.toFixed(0)} MB`;
+    }
+    if (this.dom.styleSizeBarFill) {
+      const clampedPct = Math.min(100, validation.percentOfLimit);
+      this.dom.styleSizeBarFill.style.width = `${clampedPct}%`;
+      if (validation.isBlocked) {
+        this.dom.styleSizeBarFill.style.backgroundColor = 'var(--red)';
+      } else if (validation.isWarning) {
+        this.dom.styleSizeBarFill.style.backgroundColor = 'var(--amber)';
+      } else {
+        this.dom.styleSizeBarFill.style.backgroundColor = 'var(--green)';
+      }
+    }
+    if (this.dom.badgeStylePlayable) {
+      if (validation.isBlocked) {
+        this.dom.badgeStylePlayable.className = 'style-playability-badge badge-danger';
+        this.dom.badgeStylePlayable.textContent = 'EXCEEDS LIMIT';
+        this.dom.badgeStylePlayable.title = `Total size (${validation.estimatedMB.toFixed(1)} MB) exceeds ${validation.keyboard.name} limit (${validation.maxMB.toFixed(0)} MB). Export is blocked.`;
+      } else if (validation.isWarning) {
+        this.dom.badgeStylePlayable.className = 'style-playability-badge badge-warn';
+        this.dom.badgeStylePlayable.textContent = 'NEAR LIMIT';
+        this.dom.badgeStylePlayable.title = `Size is approaching ${validation.keyboard.name} limit (${validation.percentOfLimit}%).`;
+      } else {
+        this.dom.badgeStylePlayable.className = 'style-playability-badge badge-safe';
+        this.dom.badgeStylePlayable.textContent = 'READY';
+        this.dom.badgeStylePlayable.title = `Playable on ${validation.keyboard.name} (${validation.percentOfLimit}% of limit).`;
+      }
+    }
+    if (this.dom.btnExportSty) {
+      if (validation.isBlocked) {
+        this.dom.btnExportSty.classList.add('btn-export-blocked');
+        this.dom.btnExportSty.title = `Export blocked: Exceeds ${validation.keyboard.name} playability limit.`;
+      } else {
+        this.dom.btnExportSty.classList.remove('btn-export-blocked');
+        this.dom.btnExportSty.title = `Export as Yamaha Audio Style (.aus) for ${validation.keyboard.name}`;
+      }
+    }
+  }
+
+  /**
+   * Display non-intrusive conversion toast feedback.
+   */
+  showToast(message, duration = 4000) {
+    if (!this.dom.conversionToast) return;
+    this.dom.conversionToast.innerHTML = `
+      <svg class="conversion-toast-icon" viewBox="0 0 24 24">
+        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+      </svg>
+      <span>${message}</span>
+    `;
+    this.dom.conversionToast.classList.add('visible');
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      this.dom.conversionToast.classList.remove('visible');
+    }, duration);
+  }
+
   updateUI() {
     this.dom.spinTempo.value = this.project.masterTempo;
     this.dom.selectTimeSignature.value = `${this.project.timeSignature.numerator}/${this.project.timeSignature.denominator}`;
     this.updateTimeStretchBanner();
+    this.updateUndoRedoButtons();
+    this.updateKeyboardPlayability();
   }
 }
 

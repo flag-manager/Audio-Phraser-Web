@@ -1,5 +1,5 @@
 /**
- * Yamaha Audio Phraser - WSOLA (Waveform Similarity Overlap-Add) Time-Stretcher
+ * Audio Style Slicer - WSOLA (Waveform Similarity Overlap-Add) Time-Stretcher
  * High-performance, pitch-preserving audio time-stretching algorithm.
  * Optimized with adaptive windowing for short audio slices and clean normalization.
  */

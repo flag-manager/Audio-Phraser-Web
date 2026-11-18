@@ -4,7 +4,7 @@ import { BeatDetector } from './js/analysis/beat-detector.js';
 import { WavEncoder } from './js/export/wav-encoder.js';
 import { ApprojIO } from './js/export/approj-io.js';
 
-console.log('Testing Audio Phraser Web core modules...');
+console.log('Testing Audio Style Slicer (Audio Phraser Web Version) core modules...');
 
 // 1. Test section model
 const prj = new AudioPhraserProject('TestStyle');

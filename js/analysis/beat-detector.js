@@ -1,5 +1,5 @@
 /**
- * Yamaha Audio Phraser - Beat & Onset Detection Engine
+ * Audio Style Slicer - Beat & Onset Detection Engine
  * Performs audio feature extraction, tempo estimation, and beat grid alignment.
  */
 

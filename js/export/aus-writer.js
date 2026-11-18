@@ -5,6 +5,7 @@
  */
 
 import { WavEncoder } from './wav-encoder.js';
+import { KeyboardManager } from '../model/keyboard-profiles.js';
 
 class BinaryWriter {
   constructor(initialCapacity = 65536) {
@@ -96,10 +97,23 @@ export class AusWriter {
    * Export the project to a Yamaha Audio Style (.aus) binary file.
    * @param {AudioPhraserProject} project
    * @param {ArrayBuffer} emptyStyBuffer - Buffer of Empty.sty template
+   * @param {object} options - Optional { targetKeyboard, force }
    */
-  static async exportToAus(project, emptyStyBuffer) {
+  static async exportToAus(project, emptyStyBuffer, options = {}) {
     if (!emptyStyBuffer) {
       throw new Error('Template Empty.sty is required for Yamaha style export.');
+    }
+
+    // Target Keyboard Playability Check
+    const targetKbId = options.targetKeyboard || project.targetKeyboard || 'psr_sx920';
+    const validation = KeyboardManager.validateExport(project, targetKbId, emptyStyBuffer.byteLength || 13500);
+
+    if (!validation.valid && !options.force) {
+      throw new Error(
+        `Export Blocked: Total Audio Style size (${validation.estimatedMB.toFixed(1)} MB) exceeds the ${validation.maxMB.toFixed(0)} MB playability limit for ${validation.keyboard.name}. ` +
+        `Loading this file will fail on the ${validation.keyboard.name} with "Data not loaded properly" or cause memory allocation errors. ` +
+        `Please trim loop lengths, reduce bars, or select a higher-capacity target keyboard (such as Yamaha PSR-SX920).`
+      );
     }
 
     // Filter sections that have assigned audio

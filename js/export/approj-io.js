@@ -1,6 +1,6 @@
 /**
- * Yamaha Audio Phraser - Project File (.approj) Serializer & Parser
- * Supports saving and loading complete Audio Phraser projects
+ * Audio Style Slicer - Project File (.approj) Serializer & Parser
+ * Supports saving and loading complete Audio Style Slicer projects
  * with high-performance chunked Base64 encoding.
  */
 
@@ -16,6 +16,7 @@ export class ApprojIO {
       version: '1.0.1',
       created: new Date().toISOString(),
       name: project.name,
+      targetKeyboard: project.targetKeyboard || 'psr_sx920',
       masterTempo: project.masterTempo,
       timeSignature: { ...project.timeSignature },
       ppq: project.ppq,
@@ -51,6 +52,7 @@ export class ApprojIO {
         bars: sec.bars,
         pickup: sec.pickup,
         audioFileName: sec.audioFileName,
+        audioFormatInfo: sec.audioFormatInfo ? { ...sec.audioFormatInfo } : null,
         trimStart: sec.trimStart,
         trimEnd: sec.trimEnd,
         fadeIn: sec.fadeIn,
@@ -83,6 +85,7 @@ export class ApprojIO {
     }
 
     project.name = data.name || 'Untitled';
+    project.targetKeyboard = data.targetKeyboard || project.targetKeyboard || 'psr_sx920';
     project.masterTempo = data.masterTempo || 120;
     project.timeSignature = data.timeSignature || { numerator: 4, denominator: 4 };
     project.selectedSectionId = data.selectedSectionId || 'main_a';
@@ -106,6 +109,7 @@ export class ApprojIO {
           sec.bars = sData.bars || 2;
           sec.pickup = sData.pickup || 0;
           sec.audioFileName = sData.audioFileName || null;
+          sec.audioFormatInfo = sData.audioFormatInfo || null;
           if (sData.audioFileName && project.audioPool.has(sData.audioFileName)) {
             sec.audioBuffer = project.audioPool.get(sData.audioFileName).buffer;
           }

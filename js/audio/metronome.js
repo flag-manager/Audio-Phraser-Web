@@ -1,5 +1,5 @@
 /**
- * Yamaha Audio Phraser - Metronome Engine
+ * Audio Style Slicer - Metronome Engine
  * Plays Yamaha Metro1 (accent/downbeat) and Metro2 (upbeat/click) with precise Web Audio scheduling.
  */
 

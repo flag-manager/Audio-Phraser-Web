@@ -1,12 +1,20 @@
-# Yamaha Audio Phraser Web
+<p align="center">
+  <img src="assets/logo.png" alt="Audio Style Slicer Logo" width="160">
+</p>
 
-**Yamaha Audio Phraser Web** is a complete, full-featured web rewrite of Yamaha's official Audio Phraser desktop software (originally a C++/Qt Windows `.exe`). It runs directly in all modern web browsers (Chrome, Edge, Firefox, Safari, iOS, and Android) with zero installation, zero server dependencies, and full client-side hardware-accelerated audio processing.
+<h1 align="center">Audio Style Slicer</h1>
+
+<p align="center">
+  <strong>Audio Phraser Web Version</strong> — Universal Web Workstation for Creating Yamaha Audio Styles
+</p>
 
 ---
 
-## 🎹 Overview & Capabilities
+## 🎹 Overview & Description
 
-Audio Phraser enables musicians and producers to create custom **Yamaha Audio Styles (`.aus`)** from standard `.wav` and `.aiff` rhythm loops for Yamaha arranger workstations, including:
+**Audio Style Slicer** (**Audio Phraser Web Version**) is a complete, full-featured web-based audio workstation for slicing rhythm loops and creating custom **Yamaha Audio Styles (`.aus`)**. Designed as an accessible, high-performance web edition of Yamaha's Audio Phraser desktop utility, it runs directly in all modern web browsers (Chrome, Edge, Firefox, Safari, iOS, and Android) with zero installation, zero server dependencies, and client-side hardware-accelerated audio processing.
+
+Musicians and producers can transform standard `.wav`, `.mp3`, `.aiff`, `.flac`, and `.ogg` rhythm loops into authentic, tempo-synced Yamaha Arranger Audio Styles compatible with:
 - **Yamaha Genos & Genos 2**
 - **Yamaha Tyros 5**
 - **Yamaha PSR-SX920, PSR-SX900, PSR-SX720, PSR-SX700**
@@ -45,12 +53,12 @@ Audio Phraser enables musicians and producers to create custom **Yamaha Audio St
 
 ### 5. Yamaha Metronome Engine
 - Integrated downbeat accent click (`Metro1.wav`) and regular beat tick (`Metro2.wav`).
-- Real-time Web Audio lookahead scheduling synchronized with the loop playback.
+- Real-time Web Audio lookahead scheduling synchronized with loop playback.
 - Metronome volume slider and mute toggle.
 
 ### 6. Full Yamaha Exporter & Project Management
 - **Export Audio Style (`.aus`)**: Merges the Yamaha SFF2 base structure (`Empty.sty`) with Yamaha `AASM` (Audio CASM), `ASEG`, `Adec`, `AMix`, and `AWav`/`AInf` chunks containing 44.1kHz 16-bit PCM WAV audio and `BPnt` beat tables. Load directly via USB stick into your Yamaha keyboard!
-- **Save / Open Projects (`.approj`)**: Save your complete arrangements, audio links, and marker layouts to revisit anytime.
+- **Save / Open Projects (`.approj`)**: Save complete arrangements, audio links, and marker layouts to revisit anytime.
 - **Export Section WAV**: Export individual trimmed loops as standard 44.1kHz WAV files.
 
 ---
@@ -74,8 +82,13 @@ The optimized, standalone production files will be output to `dist/`.
 npm run preview
 ```
 
+### Run Module Tests
+```bash
+npm test
+```
+
 ---
 
 ## 📄 License & Attribution
 - Based on Yamaha Audio Phraser specifications.
-- Empty.sty and metronome audio assets copyright &copy; Yamaha Corporation.
+- `Empty.sty` and metronome audio assets copyright &copy; Yamaha Corporation.

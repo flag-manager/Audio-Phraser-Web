@@ -1,5 +1,5 @@
 /**
- * Yamaha Audio Phraser - Audio Engine & Transport Manager
+ * Audio Style Slicer - Audio Engine & Transport Manager
  * Handles Web Audio playback, looping, real-time volume/panning, time-stretching, and metronome synchronization.
  */
 
@@ -348,21 +348,32 @@ export class AudioEngine {
     }
   }
 
-  startMetronomeScheduler(section, bpm, currentPlayOffset = 0) {
+  startMetronomeScheduler(section, bpm, currentPlayOffset = null) {
     this.stopMetronomeScheduler();
-    if (!this.metronome || !this.metronome.enabled || !this.isPlaying) return;
+    if (!this.metronome || !this.metronome.enabled || !this.isPlaying || !this.ctx) return;
 
     const timeSig = section?.timeSignature || { numerator: 4, denominator: 4 };
     const beatsPerBar = timeSig.numerator || 4;
-    const secondsPerBeat = (60.0 / Math.max(5, bpm)) * (4.0 / (timeSig.denominator || 4));
-
-    // Total beats in the current section loop
     const totalBeatsInLoop = Math.max(1, (section?.bars || 1) * beatsPerBar + (section?.pickup || 0));
+    const secondsPerBeat = (60.0 / Math.max(5, bpm)) * (4.0 / (timeSig.denominator || 4));
     const loopDuration = this.currentLoopDuration > 0 ? this.currentLoopDuration : (totalBeatsInLoop * secondsPerBeat);
+    const beatInterval = loopDuration / totalBeatsInLoop;
 
-    const startAudioTime = this.ctx.currentTime - currentPlayOffset;
-    let nextBeatIndex = Math.floor(currentPlayOffset / (loopDuration / totalBeatsInLoop));
-    if (nextBeatIndex < 0) nextBeatIndex = 0;
+    const now = this.ctx.currentTime;
+
+    // Anchor directly to the active audio graph's playbackStartTime for 100% phase lock
+    const loopStartTime = (this.playbackStartTime > 0 && Number.isFinite(this.playbackStartTime))
+      ? this.playbackStartTime
+      : (now - (currentPlayOffset !== null ? currentPlayOffset : 0));
+
+    const elapsed = Math.max(0, now - loopStartTime);
+    let nextBeatIndex = Math.ceil(elapsed / beatInterval);
+
+    // If within 25ms of the previous beat boundary, schedule it immediately
+    const prevBeatTime = loopStartTime + (nextBeatIndex - 1) * beatInterval;
+    if (now - prevBeatTime < 0.025 && prevBeatTime >= now - 0.035) {
+      nextBeatIndex--;
+    }
 
     const scheduleAheadTime = 0.15; // 150ms lookahead
     const checkInterval = 25;       // 25ms timer interval
@@ -372,18 +383,17 @@ export class AudioEngine {
         this.stopMetronomeScheduler();
         return;
       }
-      const now = this.ctx.currentTime;
+      const curTime = this.ctx.currentTime;
 
       while (true) {
-        const loopIndex = Math.floor(nextBeatIndex / totalBeatsInLoop);
-        const beatInLoop = nextBeatIndex % totalBeatsInLoop;
-        const beatTime = startAudioTime + (loopIndex * loopDuration) + (beatInLoop * (loopDuration / totalBeatsInLoop));
+        const beatTime = loopStartTime + nextBeatIndex * beatInterval;
 
-        if (beatTime > now + scheduleAheadTime) {
+        if (beatTime > curTime + scheduleAheadTime) {
           break; // Ahead of schedule, wait for next timer tick
         }
 
-        if (beatTime >= now - 0.05) {
+        if (beatTime >= curTime - 0.05) {
+          const beatInLoop = ((nextBeatIndex % totalBeatsInLoop) + totalBeatsInLoop) % totalBeatsInLoop;
           const isDownbeat = beatInLoop % beatsPerBar === 0;
           this.metronome.scheduleClick(beatTime, isDownbeat);
         }

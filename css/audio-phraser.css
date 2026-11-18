@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Yamaha Audio Phraser Studio — Universal Web Edition
+   Audio Style Slicer — Audio Phraser Web Version
    Design System ported from StyleCraft Studio (Yamaha Arranger Workstation UI)
    ========================================================================== */
 
@@ -454,8 +454,13 @@ svg {
 }
 
 .btn-icon {
-  width: 30px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-sm {
@@ -767,13 +772,92 @@ svg {
   text-align: center;
 }
 
-.time-stretch-banner {
-  font: 500 11px var(--font-mono);
-  color: #a4b4c7;
-  padding: 4px 10px;
-  background: #090f1a;
-  border: 1px solid var(--line);
+/* Telemetry Display (Modern DAW Telemetry Strip) */
+.telemetry-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(8, 13, 24, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
+  padding: 3px 12px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.telemetry-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.telemetry-chip-tag {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #5d718a;
+  text-transform: uppercase;
+}
+
+.telemetry-chip-val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #d8e5f5;
+  letter-spacing: 0.02em;
+}
+
+.telemetry-chip-sub {
+  font-size: 10px;
+  color: #778ca4;
+}
+
+.telemetry-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.telemetry-stretch-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.telemetry-status-badge {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.status-good {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  box-shadow: 0 0 6px rgba(0, 230, 118, 0.2);
+}
+
+.status-warn {
+  background: rgba(255, 179, 0, 0.15);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.35);
+}
+
+.status-alert {
+  background: rgba(255, 43, 91, 0.15);
+  color: #ff2b5b;
+  border: 1px solid rgba(255, 43, 91, 0.35);
+}
+
+.status-off {
+  background: rgba(255, 255, 255, 0.06);
+  color: #778ca4;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .val-green {
@@ -786,18 +870,165 @@ svg {
   font-weight: 700;
 }
 
+/* Panel Resizer Splitter */
+.panel-resizer {
+  width: 6px;
+  background: #070c16;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid rgba(0, 0, 0, 0.4);
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--trans-fast), border-color var(--trans-fast);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.panel-resizer:hover,
+.panel-resizer.resizing {
+  background: rgba(0, 229, 255, 0.2);
+  border-left-color: var(--cyan);
+}
+
+.resizer-handle {
+  width: 2px;
+  height: 28px;
+  border-radius: 1px;
+  background: #253348;
+  transition: background var(--trans-fast);
+}
+
+.panel-resizer:hover .resizer-handle,
+.panel-resizer.resizing .resizer-handle {
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+
+.panel-resizer.collapsed {
+  display: none !important;
+}
+
+/* Floating button to expand collapsed inspector */
+.btn-expand-inspector {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(9, 15, 26, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--cyan-dim);
+  border-radius: var(--radius-sm);
+  color: var(--cyan);
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  transition: all var(--trans-fast);
+}
+
+.btn-expand-inspector:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+  transform: translateX(-2px);
+}
+
+.btn-expand-inspector svg {
+  width: 13px;
+  height: 13px;
+}
+
 /* ==========================================================================
    7. SIDE CONTROLS PANEL (StyleCraft Console Hardware Aesthetics)
    ========================================================================== */
 .controls-panel {
   width: 320px;
-  min-width: 320px;
+  min-width: 240px;
+  max-width: 550px;
   background: var(--surface);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
+  flex-shrink: 0;
+  transition: width 0.15s ease, min-width 0.15s ease, padding 0.15s ease, opacity 0.15s ease;
+}
+
+.controls-panel.resizing-active {
+  transition: none !important;
+}
+
+.controls-panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0;
+  pointer-events: none;
+  border: none !important;
+}
+
+/* Inspector Header Bar */
+.inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 8px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.inspector-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #7b90a8;
+}
+
+.inspector-header-title svg {
+  width: 14px;
+  height: 14px;
+  color: var(--cyan);
+}
+
+.btn-inspector-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+
+.btn-inspector-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.btn-inspector-toggle svg {
+  width: 14px;
+  height: 14px;
 }
 
 .panel-section {
@@ -813,6 +1044,7 @@ svg {
 .panel-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 7px;
   font-family: var(--font-heading);
   font-size: 11px;
@@ -824,10 +1056,137 @@ svg {
   padding-bottom: 6px;
 }
 
+.panel-title-text {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .panel-title svg {
   width: 14px;
   height: 14px;
   color: var(--cyan);
+}
+
+.help-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+  padding: 0;
+}
+
+.help-btn:hover {
+  background: var(--cyan);
+  color: #040810;
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+  transform: scale(1.1);
+}
+
+/* Help Guide Modal Box */
+.help-guide-box {
+  max-width: 540px !important;
+  width: 90vw;
+}
+
+.modal-title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-header-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--cyan);
+}
+
+.help-guide-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #c0d1e5;
+  padding: 4px 0;
+}
+
+.help-guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.help-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #fff;
+  font-size: 13px;
+}
+
+.help-section-text {
+  margin: 0;
+  color: #9ab0c8;
+}
+
+.help-tag {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.help-tag.green {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.35);
+}
+
+.help-tag.cyan {
+  background: rgba(0, 229, 255, 0.15);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+}
+
+.help-tag.amber {
+  background: rgba(255, 179, 0, 0.15);
+  color: #ffb300;
+  border: 1px solid rgba(255, 179, 0, 0.35);
+}
+
+.help-tag.purple {
+  background: rgba(187, 134, 252, 0.15);
+  color: #bb86fc;
+  border: 1px solid rgba(187, 134, 252, 0.35);
+}
+
+.help-tip-box {
+  background: rgba(0, 229, 255, 0.06);
+  border-left: 3px solid var(--cyan);
+  padding: 6px 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 11.5px;
+  color: #a4c2db;
 }
 
 .control-row {
@@ -1343,4 +1702,370 @@ svg {
   border: 1px solid #34d399;
   color: #34d399;
   font: 600 11px var(--font-heading);
+}
+
+/* ==========================================================================
+   Target Keyboard Selector & Live Memory Playability Indicators
+   ========================================================================== */
+
+.keyboard-control-box {
+  padding: 3px 10px;
+  position: relative;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.keyboard-control-box:hover,
+.keyboard-control-box:focus-within {
+  border-color: var(--line-bright);
+}
+
+.keyboard-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.keyboard-select-wrap .control-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--cyan);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.select-keyboard-display {
+  font: 700 12px var(--font-heading);
+  color: #fff;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+.select-chevron {
+  width: 12px;
+  height: 12px;
+  stroke: var(--muted-2);
+  stroke-width: 2.2;
+  margin-left: 2px;
+  pointer-events: none;
+  transition: stroke 0.15s ease, transform 0.15s ease;
+}
+
+.keyboard-control-box:hover .select-chevron,
+.keyboard-control-box:focus-within .select-chevron {
+  stroke: var(--cyan);
+}
+
+.select-keyboard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.select-keyboard option {
+  background: #090f1a;
+  color: #edf6ff;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  padding: 6px 10px;
+}
+
+/* Real-Time Style Size & Memory Gauge in Workspace Toolbar */
+.style-size-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #080d16;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  height: 38px;
+}
+
+.style-size-labels {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.style-size-title {
+  font: 700 9px var(--font-heading);
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+
+.style-size-val {
+  font: 700 12px var(--font-mono);
+  color: #fff;
+}
+
+.style-size-slash {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.style-size-limit {
+  font: 500 11px var(--font-mono);
+  color: var(--muted);
+}
+
+.style-size-bar-bg {
+  width: 50px;
+  height: 6px;
+  background: #141f30;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.style-size-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.25s ease, background-color 0.25s ease;
+  background: var(--green);
+}
+
+.style-playability-badge {
+  font: 700 10px var(--font-heading);
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.badge-safe {
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34d399;
+}
+
+.badge-warn {
+  background: rgba(247, 189, 66, 0.15);
+  border: 1px solid rgba(247, 189, 66, 0.4);
+  color: #f7bd42;
+}
+
+.badge-danger {
+  background: rgba(251, 97, 120, 0.18);
+  border: 1px solid rgba(251, 97, 120, 0.5);
+  color: #fb6178;
+  animation: pulse-danger 1.8s infinite;
+}
+
+@keyframes pulse-danger {
+  0% { box-shadow: 0 0 0 0 rgba(251, 97, 120, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(251, 97, 120, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(251, 97, 120, 0); }
+}
+
+/* Blocked state for export button in toolbar */
+.btn-export-blocked {
+  border-color: #fb6178 !important;
+  color: #fb6178 !important;
+  background: #2a1117 !important;
+}
+
+/* Modal Form Row & Layout */
+.form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.input-select {
+  height: 34px;
+  padding: 0 10px;
+  background: #080d16;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: 600 12px var(--font-sans);
+  outline: none;
+  cursor: pointer;
+}
+
+.input-select:focus {
+  border-color: var(--cyan);
+}
+
+/* Export Modal Gauge and Playability Card */
+.export-gauge-container {
+  background: #080e18;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.gauge-title {
+  font: 700 10px var(--font-heading);
+  color: #8da1b8;
+  letter-spacing: 0.5px;
+}
+
+.gauge-stats {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #dbe7f5;
+}
+
+.export-gauge-track {
+  height: 8px;
+  background: #101a28;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.export-gauge-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.gauge-safe {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.gauge-warn {
+  background: linear-gradient(90deg, #f59e0b, #f7bd42);
+}
+
+.gauge-danger {
+  background: linear-gradient(90deg, #ef4444, #fb6178);
+}
+
+.export-playability-card {
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.export-playability-card.alert-blocked {
+  background: rgba(251, 97, 120, 0.12);
+  border: 1px solid rgba(251, 97, 120, 0.4);
+  color: #fca5a5;
+}
+
+.export-playability-card.alert-blocked .card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #fb6178;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.export-playability-card.alert-warning {
+  background: rgba(247, 189, 66, 0.12);
+  border: 1px solid rgba(247, 189, 66, 0.4);
+  color: #fde68a;
+}
+
+.export-playability-card.alert-warning .card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #f7bd42;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.export-playability-card.alert-safe {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #a7f3d0;
+}
+
+.export-playability-card.alert-safe .card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #34d399;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.card-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.card-suggestions {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(251, 97, 120, 0.3);
+}
+
+.card-suggestions ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.card-suggestions li {
+  margin-bottom: 2px;
+}
+
+.sec-size {
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+/* Real-Time Conversion Toast Notification */
+.conversion-toast {
+  position: fixed;
+  bottom: 60px;
+  right: 24px;
+  background: #0f1c2d;
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  color: #edf6ff;
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 14px rgba(32, 217, 243, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.conversion-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.conversion-toast-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--cyan);
+  flex-shrink: 0;
 }
