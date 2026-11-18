@@ -386,6 +386,8 @@ class AudioPhraserApp {
       this.updateTimeStretchBanner();
       if (this.audioEngine.isPlaying) {
         this.audioEngine.updateLiveSettings(this.project.selectedSection, val);
+      } else {
+        this.audioEngine.clearCache();
       }
       this.scheduleAutoSave();
     };
@@ -399,6 +401,8 @@ class AudioPhraserApp {
       this.updateTimeStretchBanner();
       if (this.audioEngine.isPlaying) {
         this.audioEngine.updateLiveSettings(this.project.selectedSection, this.project.masterTempo);
+      } else {
+        this.audioEngine.clearCache();
       }
       this.scheduleAutoSave();
     };
@@ -423,6 +427,8 @@ class AudioPhraserApp {
         this.updateTimeStretchBanner();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
+        } else {
+          this.audioEngine.clearCache();
         }
         this.project.isModified = true;
         this.scheduleAutoSave();
@@ -439,6 +445,8 @@ class AudioPhraserApp {
         this.updateTimeStretchBanner();
         if (this.audioEngine.isPlaying) {
           this.audioEngine.updateLiveSettings(sec, this.project.masterTempo);
+        } else {
+          this.audioEngine.clearCache();
         }
         this.project.isModified = true;
         this.scheduleAutoSave();
@@ -681,21 +689,27 @@ class AudioPhraserApp {
         return;
       }
 
-      await this.audioEngine.init();
-      if (this.audioEngine.ctx && this.audioEngine.ctx.state === 'suspended') {
-        await this.audioEngine.ctx.resume();
+      try {
+        await this.audioEngine.init();
+        if (this.audioEngine.ctx && this.audioEngine.ctx.state === 'suspended') {
+          await this.audioEngine.ctx.resume();
+        }
+
+        this.dom.btnPlayLoop.classList.add('playing');
+        this.dom.playIconWrap.innerHTML = PAUSE_ICON_SVG;
+        this.dom.playText.textContent = 'Pause';
+
+        const endSec = sec.trimEnd > 0 ? sec.trimEnd : sec.duration;
+        const startOffset = (this.waveformView.playheadSec > sec.trimStart && this.waveformView.playheadSec < endSec)
+          ? this.waveformView.playheadSec
+          : 0;
+
+        await this.audioEngine.playSection(sec, this.project.masterTempo, true, startOffset);
+      } catch (err) {
+        console.error('Playback error:', err);
+        this.stopPlayback();
+        ModalDialogs.showAlert('Playback Error', 'Failed to start playback: ' + (err?.message || err), 'error');
       }
-
-      this.dom.btnPlayLoop.classList.add('playing');
-      this.dom.playIconWrap.innerHTML = PAUSE_ICON_SVG;
-      this.dom.playText.textContent = 'Pause';
-
-      const endSec = sec.trimEnd > 0 ? sec.trimEnd : sec.duration;
-      const startOffset = (this.waveformView.playheadSec > sec.trimStart && this.waveformView.playheadSec < endSec)
-        ? this.waveformView.playheadSec
-        : 0;
-
-      await this.audioEngine.playSection(sec, this.project.masterTempo, true, startOffset);
     }
   }
 

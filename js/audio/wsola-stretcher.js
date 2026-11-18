@@ -14,6 +14,16 @@ export class WsolaTimeStretcher {
    */
   static stretch(audioBuffer, audioContext, ratio = 1.0) {
     if (!Number.isFinite(ratio) || Math.abs(ratio - 1.0) < 0.005) {
+      if (audioContext && typeof audioContext.createBuffer === 'function') {
+        const isGenuine = (typeof AudioBuffer !== 'undefined' && audioBuffer instanceof AudioBuffer);
+        if (!isGenuine) {
+          const genuine = audioContext.createBuffer(audioBuffer.numberOfChannels, audioBuffer.length, audioBuffer.sampleRate);
+          for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+            genuine.getChannelData(c).set(audioBuffer.getChannelData(c));
+          }
+          return genuine;
+        }
+      }
       return audioBuffer; // No stretch needed or invalid ratio
     }
 
@@ -26,19 +36,33 @@ export class WsolaTimeStretcher {
     const outLen = Math.max(1, Math.round(inLen * clampedRatio));
 
     if (inLen < 256) {
+      if (audioContext && typeof audioContext.createBuffer === 'function') {
+        const isGenuine = (typeof AudioBuffer !== 'undefined' && audioBuffer instanceof AudioBuffer);
+        if (!isGenuine) {
+          const genuine = audioContext.createBuffer(numChannels, inLen, sampleRate);
+          for (let c = 0; c < numChannels; c++) {
+            genuine.getChannelData(c).set(audioBuffer.getChannelData(c));
+          }
+          return genuine;
+        }
+      }
       return audioBuffer;
     }
 
     const outBuffer = audioContext.createBuffer(numChannels, outLen, sampleRate);
 
-    // Adapt window size for very short loops
+    // Adapt window size for short loops or low stretch ratios
     let windowSize = 2048;
-    if (inLen < windowSize * 2) {
-      windowSize = Math.max(256, 1 << Math.floor(Math.log2(inLen / 2)));
+    const minSamples = Math.min(inLen, outLen);
+    if (minSamples < windowSize * 2) {
+      windowSize = Math.max(64, 1 << Math.floor(Math.log2(Math.max(128, minSamples / 2))));
+      while (windowSize >= minSamples && windowSize > 64) {
+        windowSize >>= 1;
+      }
     }
-    const hopOut = Math.max(64, windowSize >> 2);
-    const hopIn = Math.max(32, Math.round(hopOut / clampedRatio));
-    const maxShift = Math.min(windowSize >> 2, Math.max(32, windowSize >> 3));
+    const hopOut = Math.max(16, windowSize >> 2);
+    const hopIn = Math.max(16, Math.round(hopOut / clampedRatio));
+    const maxShift = Math.min(windowSize >> 2, Math.max(8, windowSize >> 3));
 
     // Precompute Hann window
     const window = new Float32Array(windowSize);
@@ -109,6 +133,21 @@ export class WsolaTimeStretcher {
       lastInPos = matchPos;
       inPos += hopIn;
       outPos += hopOut;
+    }
+
+    // Blend any remaining tail frames to avoid abrupt silence
+    if (outPos < outLen) {
+      const remOut = outLen - outPos;
+      const remIn = inLen - inPos;
+      const copyLen = Math.min(remOut, Math.max(0, remIn));
+      for (let c = 0; c < numChannels; c++) {
+        const inp = inChannels[c];
+        const outp = outChannels[c];
+        for (let i = 0; i < copyLen; i++) {
+          outp[outPos + i] += inp[Math.min(inLen - 1, inPos + i)];
+          norm[outPos + i] += 1.0;
+        }
+      }
     }
 
     // Normalize overlapping frames

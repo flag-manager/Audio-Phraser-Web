@@ -415,7 +415,7 @@ export class WaveformView {
     // Mouse drag interactions for trim handles and beat points
     this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    window.addEventListener('mouseup', () => this.onMouseUp());
+    window.addEventListener('mouseup', (e) => this.onMouseUp(e));
 
     // Wheel zoom & pan
     this.canvas.addEventListener('wheel', (e) => {

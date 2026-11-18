@@ -7,7 +7,7 @@
     "dev": "vite --port 5174 --host",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node test-modules.js && node test-aus-export.js"
+    "test": "node test-modules.js && node test-aus-export.js && node test-playback-fixes.js"
   },
   "devDependencies": {
     "vite": "^6.2.0"

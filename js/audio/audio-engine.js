@@ -28,6 +28,7 @@ export class AudioEngine {
     this.stretchedBuffer = null;
     this.metroTimer = null;
     this.stretchCache = null; // { key, buffer }
+    this._liveUpdateSeq = 0;
 
     // Callbacks
     this.onPlayheadUpdate = null;
@@ -84,7 +85,28 @@ export class AudioEngine {
    */
   sliceBuffer(buffer, startSec, endSec, applyFade = false) {
     if (!buffer) return null;
-    return WavEncoder.sliceBuffer(buffer, startSec, endSec, applyFade, this.ctx);
+    const sliced = WavEncoder.sliceBuffer(buffer, startSec, endSec, applyFade, this.ctx);
+    // Guarantee that sliced is a real Web Audio AudioBuffer if AudioContext is available
+    if (this.ctx && typeof this.ctx.createBuffer === 'function') {
+      const isGenuine = (typeof AudioBuffer !== 'undefined' && sliced instanceof AudioBuffer);
+      if (!isGenuine) {
+        const genuine = this.ctx.createBuffer(sliced.numberOfChannels, sliced.length, sliced.sampleRate);
+        for (let c = 0; c < sliced.numberOfChannels; c++) {
+          genuine.getChannelData(c).set(sliced.getChannelData(c));
+        }
+        return genuine;
+      }
+    }
+    return sliced;
+  }
+
+  getStretchCacheKey(section, startSec, endSec, targetTempo) {
+    const bars = section.bars || 1;
+    const pickup = section.pickup || 0;
+    const num = section.timeSignature?.numerator || 4;
+    const den = section.timeSignature?.denominator || 4;
+    const expectedDur = section.getSectionExpectedDuration(targetTempo).toFixed(4);
+    return `${section.id}_${startSec.toFixed(3)}_${endSec.toFixed(3)}_${targetTempo}_${bars}_${pickup}_${num}_${den}_${expectedDur}_${section.fadeIn}`;
   }
 
   clearCache() {
@@ -104,6 +126,7 @@ export class AudioEngine {
 
     if (!section || !section.hasAudio) return;
 
+    this._liveUpdateSeq = (this._liveUpdateSeq || 0) + 1;
     this.playbackSection = section;
     this.isLooping = loop;
 
@@ -120,7 +143,7 @@ export class AudioEngine {
     if (section.timeStretchEnabled && secExpectedDuration > 0.05 && trimmed.duration > 0.05) {
       const ratio = secExpectedDuration / trimmed.duration;
       if (Math.abs(ratio - 1.0) >= 0.01) {
-        const cacheKey = `${section.id}_${startSec.toFixed(3)}_${endSec.toFixed(3)}_${targetTempo}_${section.fadeIn}`;
+        const cacheKey = this.getStretchCacheKey(section, startSec, endSec, targetTempo);
         if (this.stretchCache && this.stretchCache.key === cacheKey) {
           playBuffer = this.stretchCache.buffer;
         } else {
@@ -128,6 +151,15 @@ export class AudioEngine {
           this.stretchCache = { key: cacheKey, buffer: playBuffer };
         }
       }
+    }
+
+    // Ensure playBuffer is genuinely an AudioBuffer
+    if (this.ctx && !(typeof AudioBuffer !== 'undefined' && playBuffer instanceof AudioBuffer)) {
+      const genuine = this.ctx.createBuffer(playBuffer.numberOfChannels, playBuffer.length, playBuffer.sampleRate);
+      for (let c = 0; c < playBuffer.numberOfChannels; c++) {
+        genuine.getChannelData(c).set(playBuffer.getChannelData(c));
+      }
+      playBuffer = genuine;
     }
 
     this.stretchedBuffer = playBuffer;
@@ -142,6 +174,7 @@ export class AudioEngine {
         playOffset = Math.max(0, Math.min(playBuffer.duration - 0.02, rawOffset * actualRatio));
       }
     }
+    if (!Number.isFinite(playOffset)) playOffset = 0.0;
 
     this.playbackStartTime = this.ctx.currentTime - playOffset;
     this.isPlaying = true;
@@ -171,7 +204,7 @@ export class AudioEngine {
     }
 
     src.onended = () => {
-      if (!this.isLooping && this.isPlaying) {
+      if (!this.isLooping && this.isPlaying && this.activeSource === src) {
         this.stop(true);
       }
     };
@@ -199,11 +232,14 @@ export class AudioEngine {
   async updateLiveSettings(section, targetTempo) {
     if (!this.isPlaying || !this.playbackSection || !this.activeSource) return;
 
+    // Concurrency sequence token: prevents stale async stretches from taking effect
+    const seq = ++this._liveUpdateSeq;
+
     this.playbackSection = section;
 
     // Calculate current playback phase (0.0 to 1.0)
     const now = this.ctx.currentTime;
-    const elapsed = now - this.playbackStartTime;
+    const elapsed = Math.max(0, now - this.playbackStartTime);
     const prevDuration = this.currentLoopDuration > 0 ? this.currentLoopDuration : 1.0;
     const currentPhase = (elapsed % prevDuration) / prevDuration;
 
@@ -219,7 +255,7 @@ export class AudioEngine {
     if (section.timeStretchEnabled && secExpectedDuration > 0.05 && trimmed.duration > 0.05) {
       const ratio = secExpectedDuration / trimmed.duration;
       if (Math.abs(ratio - 1.0) >= 0.01) {
-        const cacheKey = `${section.id}_${startSec.toFixed(3)}_${endSec.toFixed(3)}_${targetTempo}_${section.fadeIn}`;
+        const cacheKey = this.getStretchCacheKey(section, startSec, endSec, targetTempo);
         if (this.stretchCache && this.stretchCache.key === cacheKey) {
           playBuffer = this.stretchCache.buffer;
         } else {
@@ -229,10 +265,24 @@ export class AudioEngine {
       }
     }
 
+    // Check if another live update started or playback was stopped while stretching
+    if (seq !== this._liveUpdateSeq || !this.isPlaying) return;
+
+    // Ensure playBuffer is genuinely an AudioBuffer
+    if (this.ctx && !(typeof AudioBuffer !== 'undefined' && playBuffer instanceof AudioBuffer)) {
+      const genuine = this.ctx.createBuffer(playBuffer.numberOfChannels, playBuffer.length, playBuffer.sampleRate);
+      for (let c = 0; c < playBuffer.numberOfChannels; c++) {
+        genuine.getChannelData(c).set(playBuffer.getChannelData(c));
+      }
+      playBuffer = genuine;
+    }
+
     this.stretchedBuffer = playBuffer;
     this.currentLoopDuration = playBuffer.duration;
 
-    const newOffset = Math.max(0, Math.min(playBuffer.duration - 0.01, currentPhase * playBuffer.duration));
+    const safeDuration = Math.max(0.01, playBuffer.duration);
+    const safePhase = Number.isFinite(currentPhase) ? Math.max(0, Math.min(1.0, currentPhase)) : 0;
+    const newOffset = Math.max(0, Math.min(Math.max(0, safeDuration - 0.01), safePhase * safeDuration));
     this.playbackStartTime = this.ctx.currentTime - newOffset;
 
     const newSrc = this.ctx.createBufferSource();
@@ -246,7 +296,7 @@ export class AudioEngine {
     }
 
     newSrc.onended = () => {
-      if (!this.isLooping && this.isPlaying) {
+      if (!this.isLooping && this.isPlaying && this.activeSource === newSrc) {
         this.stop(true);
       }
     };
@@ -261,6 +311,7 @@ export class AudioEngine {
     }
 
     if (oldSrc) {
+      oldSrc.onended = null;
       try {
         oldSrc.stop();
         oldSrc.disconnect();
@@ -274,7 +325,9 @@ export class AudioEngine {
 
   stop(notify = true) {
     this.isPlaying = false;
+    this._liveUpdateSeq = (this._liveUpdateSeq || 0) + 1;
     if (this.activeSource) {
+      this.activeSource.onended = null;
       try {
         this.activeSource.stop();
         this.activeSource.disconnect();
@@ -297,41 +350,50 @@ export class AudioEngine {
 
   startMetronomeScheduler(section, bpm, currentPlayOffset = 0) {
     this.stopMetronomeScheduler();
-    if (!this.metronome || !this.metronome.enabled) return;
+    if (!this.metronome || !this.metronome.enabled || !this.isPlaying) return;
 
     const timeSig = section?.timeSignature || { numerator: 4, denominator: 4 };
-    const beatsPerBar = timeSig.numerator;
+    const beatsPerBar = timeSig.numerator || 4;
     const secondsPerBeat = (60.0 / Math.max(5, bpm)) * (4.0 / (timeSig.denominator || 4));
 
-    const startBeatIndex = Math.floor(currentPlayOffset / secondsPerBeat);
-    const offsetInBeat = currentPlayOffset % secondsPerBeat;
-    let nextBeatTime = this.ctx.currentTime + (secondsPerBeat - offsetInBeat);
-    let beatIndex = startBeatIndex + 1;
+    // Total beats in the current section loop
+    const totalBeatsInLoop = Math.max(1, (section?.bars || 1) * beatsPerBar + (section?.pickup || 0));
+    const loopDuration = this.currentLoopDuration > 0 ? this.currentLoopDuration : (totalBeatsInLoop * secondsPerBeat);
 
-    if (offsetInBeat < 0.02) {
-      this.metronome.scheduleClick(this.ctx.currentTime, startBeatIndex % beatsPerBar === 0);
-    }
+    const startAudioTime = this.ctx.currentTime - currentPlayOffset;
+    let nextBeatIndex = Math.floor(currentPlayOffset / (loopDuration / totalBeatsInLoop));
+    if (nextBeatIndex < 0) nextBeatIndex = 0;
 
     const scheduleAheadTime = 0.15; // 150ms lookahead
-    const checkInterval = 25;       // 25ms interval
+    const checkInterval = 25;       // 25ms timer interval
 
     this.metroTimer = setInterval(() => {
-      if (!this.isPlaying) return;
+      if (!this.isPlaying) {
+        this.stopMetronomeScheduler();
+        return;
+      }
       const now = this.ctx.currentTime;
 
-      while (nextBeatTime < now + scheduleAheadTime) {
-        const isDownbeat = beatIndex % beatsPerBar === 0;
-        this.metronome.scheduleClick(nextBeatTime, isDownbeat);
-        nextBeatTime += secondsPerBeat;
-        beatIndex++;
+      while (true) {
+        const loopIndex = Math.floor(nextBeatIndex / totalBeatsInLoop);
+        const beatInLoop = nextBeatIndex % totalBeatsInLoop;
+        const beatTime = startAudioTime + (loopIndex * loopDuration) + (beatInLoop * (loopDuration / totalBeatsInLoop));
 
-        // Wrap beatIndex at loop boundary
-        if (this.isLooping && this.currentLoopDuration > 0) {
-          const loopTime = nextBeatTime - this.playbackStartTime;
-          if (loopTime >= this.currentLoopDuration) {
-            nextBeatTime = this.playbackStartTime + (loopTime % this.currentLoopDuration);
-            beatIndex = 0;
-          }
+        if (beatTime > now + scheduleAheadTime) {
+          break; // Ahead of schedule, wait for next timer tick
+        }
+
+        if (beatTime >= now - 0.05) {
+          const isDownbeat = beatInLoop % beatsPerBar === 0;
+          this.metronome.scheduleClick(beatTime, isDownbeat);
+        }
+
+        nextBeatIndex++;
+
+        // If not looping, stop metronome at end of section
+        if (!this.isLooping && nextBeatIndex >= totalBeatsInLoop) {
+          this.stopMetronomeScheduler();
+          break;
         }
       }
     }, checkInterval);
@@ -342,9 +404,9 @@ export class AudioEngine {
       if (!this.isPlaying || !this.playbackSection) return;
 
       const now = this.ctx.currentTime;
-      const elapsed = now - this.playbackStartTime;
+      const elapsed = Math.max(0, now - this.playbackStartTime);
       const loopLen = this.currentLoopDuration > 0 ? this.currentLoopDuration : 1.0;
-      const normalizedPos = (elapsed % loopLen) / loopLen; // 0.0 to 1.0
+      const normalizedPos = ((elapsed % loopLen) + loopLen) % loopLen / loopLen; // 0.0 to 1.0
 
       // Map back to trimmed waveform range in seconds
       const startSec = this.playbackSection.trimStart;

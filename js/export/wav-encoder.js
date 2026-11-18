@@ -11,9 +11,10 @@ export class WavEncoder {
    * @param {number} startSec
    * @param {number} endSec
    * @param {boolean} applyFade
-   * @returns {object} Sliced buffer-like object { numberOfChannels, sampleRate, length, duration, getChannelData }
+   * @param {AudioContext|object} audioContext - Optional AudioContext to create genuine AudioBuffer
+   * @returns {AudioBuffer|object} Genuine AudioBuffer or buffer-like object { numberOfChannels, sampleRate, length, duration, getChannelData }
    */
-  static sliceBuffer(buffer, startSec, endSec, applyFade = false) {
+  static sliceBuffer(buffer, startSec, endSec, applyFade = false, audioContext = null) {
     const sr = buffer.sampleRate;
     const dur = buffer.duration;
     const clampedStart = Math.max(0, Math.min(dur, startSec));
@@ -46,6 +47,18 @@ export class WavEncoder {
         dst[i] = Number.isFinite(s) ? s * gain : 0;
       }
       channelsData.push(dst);
+    }
+
+    if (audioContext && typeof audioContext.createBuffer === 'function') {
+      const outAudioBuf = audioContext.createBuffer(numChannels, numSamples, sr);
+      for (let c = 0; c < numChannels; c++) {
+        if (typeof outAudioBuf.copyToChannel === 'function') {
+          outAudioBuf.copyToChannel(channelsData[c], c);
+        } else {
+          outAudioBuf.getChannelData(c).set(channelsData[c]);
+        }
+      }
+      return outAudioBuf;
     }
 
     return {
